@@ -1,10 +1,17 @@
 "use client";
 
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from "react-leaflet";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  Polyline,
+  CircleMarker,
+} from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { BusRoute, ChargingStation } from "../page";
-import { useEffect, useState, useMemo } from "react";
+import { useMemo } from "react";
 
 const chargingIcon = L.icon({
   iconUrl: "/assets/charging_station_icon.png",
@@ -28,6 +35,7 @@ export type ActiveBus = {
   start_seconds: number;
   end_seconds: number;
   geometry: { type: "LineString"; coordinates: [number, number][] } | null; // GeoJSON [lon,lat]
+  status?: "active" | "next" | "prev";
 };
 
 export type PlaybackAll = {
@@ -35,6 +43,61 @@ export type PlaybackAll = {
   currentTime: number | null;
   showTripLines?: boolean;
 };
+
+// ---------------- Battery helpers ----------------
+
+function clamp(x: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, x));
+}
+
+type BatteryParams = { capacityKWh: number; runKW: number; idleKW: number };
+
+function socAtTime(
+  t: number,
+  intervals: { start: number; end: number }[],
+  p: BatteryParams
+) {
+  const cap = p.capacityKWh;
+  let usedKWh = 0;
+
+  // Prefer starting battery accounting at first trip start (more intuitive)
+  let cursor = intervals.length ? intervals[0].start : 0;
+
+  for (const iv of intervals) {
+    if (t <= cursor) break;
+
+    // idle cursor -> iv.start
+    const idleEnd = Math.min(t, iv.start);
+    if (idleEnd > cursor) {
+      usedKWh += p.idleKW * ((idleEnd - cursor) / 3600);
+    }
+    if (t <= iv.start) break;
+
+    // run iv.start -> iv.end
+    const runEnd = Math.min(t, iv.end);
+    if (runEnd > iv.start) {
+      usedKWh += p.runKW * ((runEnd - iv.start) / 3600);
+    }
+
+    cursor = Math.max(cursor, iv.end);
+  }
+
+  // idle after last trip
+  if (t > cursor) usedKWh += p.idleKW * ((t - cursor) / 3600);
+
+  const remaining = clamp(cap - usedKWh, 0, cap);
+  const soc = cap > 0 ? remaining / cap : 0;
+
+  return { soc, remainingKWh: remaining };
+}
+
+function socColor(soc: number) {
+  if (soc >= 0.5) return "#16a34a"; // green
+  if (soc >= 0.2) return "#f59e0b"; // amber
+  return "#dc2626"; // red
+}
+
+// ---------------- Geometry helpers ----------------
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
@@ -46,7 +109,6 @@ function pointAlongPolyline(latlngs: LatLng[], f: number): LatLng | null {
 
   const clamped = Math.max(0, Math.min(1, f));
 
-  // Segment lengths (in degrees; fine for visualization)
   let total = 0;
   const segLens: number[] = [];
   for (let i = 0; i < latlngs.length - 1; i++) {
@@ -81,43 +143,74 @@ function pointAlongPolyline(latlngs: LatLng[], f: number): LatLng | null {
 export default function LeafletMap({
   chargingStations,
   busRoutes,
-  playbackAll, // <-- NEW
+  playbackAll,
+  intervalsByBlock,
 }: {
   chargingStations: ChargingStation[];
   busRoutes?: BusRoute[];
   playbackAll?: PlaybackAll | null;
+  intervalsByBlock?: Record<string, { start: number; end: number }[]>;
 }) {
-  // Compute all active bus marker positions whenever time/buses update
+  const battery: BatteryParams = { capacityKWh: 450, runKW: 110, idleKW: 6 };
+
   const activeMarkers = useMemo(() => {
     if (!playbackAll || playbackAll.currentTime == null) return [];
-
     const t = playbackAll.currentTime;
 
     return playbackAll.buses
       .map((b) => {
         if (!b.geometry) return null;
-
         const coords = b.geometry.coordinates;
         if (!coords || coords.length < 2) return null;
 
-        // Convert GeoJSON [lon,lat] to Leaflet [lat,lon]
         const latlngs: LatLng[] = coords.map(([lon, lat]) => [lat, lon]);
+
+        // Determine marker position:
+        // - active: interpolate by time fraction within [start,end]
+        // - next: stick to start of line
+        // - prev: stick to end of line
+        let pos: LatLng | null = null;
 
         const dur = Math.max(1, b.end_seconds - b.start_seconds);
         const f = (t - b.start_seconds) / dur;
 
-        const pos = pointAlongPolyline(latlngs, f);
+        if (b.status === "next") pos = latlngs[0];
+        else if (b.status === "prev") pos = latlngs[latlngs.length - 1];
+        else pos = pointAlongPolyline(latlngs, f);
+
         if (!pos) return null;
+
+        const intervals = intervalsByBlock?.[b.block_id] ?? [];
+        const socInfo =
+          intervals.length && playbackAll.currentTime != null
+            ? socAtTime(playbackAll.currentTime, intervals, battery)
+            : null;
+
+        const socPct = socInfo ? Math.round(socInfo.soc * 100) : null;
+        const ringColor = socInfo ? socColor(socInfo.soc) : "#2563eb";
 
         return {
           block_id: b.block_id,
           trip_id: b.trip_id,
           pos,
-          latlngs, // useful if you want to draw the active trip line
+          latlngs,
+          socInfo,
+          socPct,
+          ringColor,
+          status: b.status ?? "active",
         };
       })
-      .filter(Boolean) as { block_id: string; trip_id: string; pos: LatLng; latlngs: LatLng[] }[];
-  }, [playbackAll]);
+      .filter(Boolean) as {
+        block_id: string;
+        trip_id: string;
+        pos: LatLng;
+        latlngs: LatLng[];
+        socInfo: { soc: number; remainingKWh: number } | null;
+        socPct: number | null;
+        ringColor: string;
+        status: "active" | "next" | "prev";
+      }[];
+  }, [playbackAll, intervalsByBlock]);
 
   return (
     <MapContainer
@@ -153,7 +246,7 @@ export default function LeafletMap({
         ))
       )}
 
-      {/* OPTIONAL: draw each active block's current trip line */}
+      {/* OPTIONAL: draw each block's chosen trip line */}
       {playbackAll?.showTripLines &&
         activeMarkers.map((m) => (
           <Polyline
@@ -163,20 +256,46 @@ export default function LeafletMap({
           />
         ))}
 
-      {/* NEW: all active buses at once */}
+      {/* All buses at once + battery ring */}
       {activeMarkers.map((m) => (
-        <Marker key={`bus-${m.block_id}`} position={m.pos} icon={busIcon}>
-          <Popup>
-            <div style={{ fontSize: 13 }}>
-              <div>
-                <strong>Block:</strong> {m.block_id}
+        <div key={`bus-wrap-${m.block_id}`}>
+          {/* battery ring */}
+          {m.socInfo && (
+            <CircleMarker
+              center={m.pos}
+              radius={14}
+              pathOptions={{ color: m.ringColor, weight: 4, opacity: 0.9 }}
+              fillOpacity={0}
+            />
+          )}
+
+          <Marker key={`bus-${m.block_id}`} position={m.pos} icon={busIcon}>
+            <Popup>
+              <div style={{ fontSize: 13 }}>
+                <div>
+                  <strong>Block:</strong> {m.block_id}
+                </div>
+                <div>
+                  <strong>Trip:</strong> {m.trip_id}
+                </div>
+                <div>
+                  <strong>Status:</strong> {m.status}
+                </div>
+                {m.socInfo && (
+                  <>
+                    <div>
+                      <strong>Battery:</strong> {m.socPct}%
+                    </div>
+                    <div>
+                      <strong>Remaining:</strong>{" "}
+                      {m.socInfo.remainingKWh.toFixed(1)} kWh
+                    </div>
+                  </>
+                )}
               </div>
-              <div>
-                <strong>Trip:</strong> {m.trip_id}
-              </div>
-            </div>
-          </Popup>
-        </Marker>
+            </Popup>
+          </Marker>
+        </div>
       ))}
     </MapContainer>
   );
