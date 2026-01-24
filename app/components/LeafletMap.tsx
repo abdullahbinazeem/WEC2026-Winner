@@ -26,6 +26,28 @@ const busIcon = L.icon({
   iconAnchor: [12, 12],
 });
 
+// Line/route name -> driver contact (made-up placeholders). Keys are lowercased.
+const DRIVER_DIRECTORY: Record<string, { name: string; phone: string; notes?: string }> = {
+  "green line": { name: "Jordan Alvarez", phone: "780-555-4123", notes: "Day shift" },
+  "blue line": { name: "Priya Desai", phone: "780-555-7741", notes: "Night shift" },
+  "red line": { name: "Marcus Bell", phone: "780-555-6644" },
+  "orange line": { name: "Elena Park", phone: "780-555-2255" },
+  "north loop": { name: "Sofia Ramirez", phone: "780-555-8890" },
+  "south loop": { name: "Caleb Wright", phone: "780-555-0917" },
+  "east express": { name: "Liam Thompson", phone: "780-555-3826" },
+  "west rapid": { name: "Avery McKenzie", phone: "780-555-5408" },
+};
+
+const DRIVER_ROSTER = [
+  { name: "Harper Collins", phone: "780-555-1304" },
+  { name: "Noah Patel", phone: "780-555-2479" },
+  { name: "Maya Singh", phone: "780-555-6682" },
+  { name: "Oliver Chen", phone: "780-555-9044" },
+  { name: "Zoe Martinez", phone: "780-555-3176" },
+  { name: "Ethan Brooks", phone: "780-555-8621" },
+  { name: "Isla Nguyen", phone: "780-555-7490" },
+  { name: "Henry Adams", phone: "780-555-5013" },
+];
 
 type LatLng = [number, number]; // [lat, lon]
 
@@ -33,6 +55,7 @@ type LatLng = [number, number]; // [lat, lon]
 export type ActiveBus = {
   block_id: string;
   trip_id: string;
+  route_id?: string | null;
   start_seconds: number;
   end_seconds: number;
   geometry: { type: "LineString"; coordinates: [number, number][] } | null; // GeoJSON [lon,lat]
@@ -141,6 +164,20 @@ function pointAlongPolyline(latlngs: LatLng[], f: number): LatLng | null {
   return latlngs[latlngs.length - 1];
 }
 
+function haversineMeters(a: LatLng, b: LatLng) {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const R = 6371000; // meters
+  const dLat = toRad(b[0] - a[0]);
+  const dLon = toRad(b[1] - a[1]);
+  const lat1 = toRad(a[0]);
+  const lat2 = toRad(b[0]);
+
+  const sinDLat = Math.sin(dLat / 2);
+  const sinDLon = Math.sin(dLon / 2);
+  const h = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLon * sinDLon;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
 export default function LeafletMap({
   chargingStations,
   busRoutes,
@@ -196,6 +233,7 @@ export default function LeafletMap({
         return {
           block_id: b.block_id,
           trip_id: b.trip_id,
+          route_id: b.route_id ?? null,
           pos,
           latlngs,
           socInfo,
@@ -221,6 +259,37 @@ export default function LeafletMap({
     return activeMarkers.find((m) => m.block_id === selectedBlockId) ?? null;
   }, [activeMarkers, selectedBlockId]);
 
+  // Decorate with nearest charging station and driver info
+  const markersWithDetails = useMemo(() => {
+    const ensureDriver = (routeId: string | null, blockId: string) => {
+      const key = routeId?.trim().toLowerCase();
+      if (key && DRIVER_DIRECTORY[key]) return DRIVER_DIRECTORY[key];
+
+      // Deterministic fallback based on route/block so it's stable per bus
+      const hashKey = key ?? blockId;
+      let h = 0;
+      for (let i = 0; i < hashKey.length; i++) {
+        h = (h * 31 + hashKey.charCodeAt(i)) >>> 0;
+      }
+      return DRIVER_ROSTER[h % DRIVER_ROSTER.length];
+    };
+
+    return activeMarkers.map((m) => {
+      let nearest = null as null | { name: string; distanceMeters: number };
+      for (const s of chargingStations) {
+        const dist = haversineMeters(m.pos, [s.lat, s.lng]);
+        if (!nearest || dist < nearest.distanceMeters) {
+          nearest = { name: s.name, distanceMeters: dist };
+        }
+      }
+
+      return {
+        ...m,
+        nearest,
+        driver: ensureDriver(m.route_id, m.block_id),
+      };
+    });
+  }, [activeMarkers, chargingStations]);
 
   return (
     <MapContainer
@@ -258,7 +327,7 @@ export default function LeafletMap({
 
       {/* OPTIONAL: draw each block's chosen trip line */}
       {playbackAll?.showTripLines &&
-        activeMarkers.map((m) => (
+        markersWithDetails.map((m) => (
           <Polyline
             key={`active-trip-${m.block_id}-${m.trip_id}`}
             positions={m.latlngs}
@@ -267,7 +336,7 @@ export default function LeafletMap({
         ))}
 
       {/* All buses at once + battery ring */}
-      {activeMarkers.map((m) => (
+      {markersWithDetails.map((m) => (
         <div key={`bus-wrap-${m.block_id}`}>
           {/* battery ring */}
           {m.socInfo && (
@@ -309,9 +378,23 @@ export default function LeafletMap({
                   <strong>Trip:</strong> {m.trip_id}
                 </div>
                 <div>
+                  <strong>Line:</strong> {m.route_id ?? "—"}
+                </div>
+                <div>
                   <strong>Status:</strong> {m.status}
                 </div>
 
+                <div style={{ marginTop: 6 }}>
+                  <div><strong>Driver:</strong> {m.driver?.name ?? "Not assigned"}</div>
+                  <div><strong>Phone:</strong> {m.driver?.phone ?? "—"}</div>
+                  {m.driver?.notes && <div>{m.driver.notes}</div>}
+                </div>
+                {m.nearest && (
+                  <div style={{ marginTop: 6 }}>
+                    <div><strong>Nearest charger:</strong> {m.nearest.name}</div>
+                    <div>Distance: {(m.nearest.distanceMeters / 1000).toFixed(2)} km</div>
+                  </div>
+                )}
                 {m.socInfo && (
                   <>
                     <div>
