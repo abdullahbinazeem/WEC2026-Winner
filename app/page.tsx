@@ -51,6 +51,7 @@ export type ChargingStation = {
 export default function Home() {
   const [chargingStations, setChargingStations] = useState<ChargingStation[]>([]);
   const [busRoutes, setBusRoutes] = useState<BusRoute[]>([]);
+  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
 
   // Controlled by AllBlocksSidebar
   const [playbackParams, setPlaybackParams] = useState<{
@@ -61,6 +62,8 @@ export default function Home() {
   } | null>(null);
 
   const [buses, setBuses] = useState<any[]>([]);
+  const [intervalsByBlock, setIntervalsByBlock] = useState<Record<string, { start: number; end: number }[]>>({});
+
 
   // Load charging stations
   useEffect(() => {
@@ -76,6 +79,16 @@ export default function Home() {
         setChargingStations(stations);
       });
   }, []);
+
+  useEffect(() => {
+    if (!playbackParams?.serviceId) return;
+
+    fetch(`/api/block_intervals?service_id=${encodeURIComponent(playbackParams.serviceId)}`)
+      .then((r) => r.json())
+      .then((j) => setIntervalsByBlock(j.intervalsByBlock ?? {}))
+      .catch(() => setIntervalsByBlock({}));
+  }, [playbackParams?.serviceId]);
+
 
   // Load route geometries
   useEffect(() => {
@@ -144,7 +157,10 @@ export default function Home() {
           currentTime: mapTime,
           showTripLines: false,
         }}
+        intervalsByBlock={intervalsByBlock}
+        highlightedRouteId={selectedRouteId}
       />
+
 
       {/* Overlay layer */}
       <div className="fixed inset-0 z-[99999] pointer-events-none">
@@ -156,7 +172,15 @@ export default function Home() {
       {/* Bottom list */}
       <div className="fixed bottom-0 left-0 w-full h-50 z-[9999] text-black bg-white overflow-scroll">
         {busRoutes.map((route) => (
-          <div key={route.routeId}>
+          <div
+            key={route.routeId}
+            onClick={() => setSelectedRouteId(route.routeId === selectedRouteId ? null : route.routeId)}
+            className={`cursor-pointer p-2 hover:bg-gray-100 transition-colors ${selectedRouteId === route.routeId ? 'bg-blue-100 font-bold' : ''
+              }`}
+            style={{
+              borderLeft: `4px solid ${route.color}`
+            }}
+          >
             <h2>Route {route.routeId}</h2>
           </div>
         ))}
