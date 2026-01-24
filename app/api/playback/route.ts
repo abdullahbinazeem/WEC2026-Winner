@@ -43,20 +43,20 @@ export async function GET(req: Request) {
         const trips = db
             .prepare(
                 `
-        SELECT trip_id, block_id
+        SELECT trip_id, block_id, route_id
         FROM trips
         WHERE service_id = ?
           AND block_id IS NOT NULL AND TRIM(block_id) <> ''
       `
             )
-            .all(serviceId) as { trip_id: string; block_id: string }[];
+            .all(serviceId) as { trip_id: string; block_id: string; route_id: string | null }[];
 
         // 2) For each trip, compute start/end from stop_times
         // We want active trip per block at time t.
         // This is not the most optimized approach, but fine for prototypes.
         const activeByBlock = new Map<
             string,
-            { trip_id: string; start: number; end: number }
+            { trip_id: string; route_id: string | null; start: number; end: number }
         >();
 
         for (const tr of trips) {
@@ -102,7 +102,12 @@ export async function GET(req: Request) {
             // If multiple trips overlap (rare), prefer the one with latest start
             const cur = activeByBlock.get(tr.block_id);
             if (!cur || minT > cur.start) {
-                activeByBlock.set(tr.block_id, { trip_id: tr.trip_id, start: minT, end: maxT });
+                activeByBlock.set(tr.block_id, {
+                    trip_id: tr.trip_id,
+                    route_id: tr.route_id ?? null,
+                    start: minT,
+                    end: maxT,
+                });
             }
         }
 
@@ -124,6 +129,7 @@ export async function GET(req: Request) {
             buses.push({
                 block_id,
                 trip_id: info.trip_id,
+                route_id: info.route_id,
                 start_seconds: info.start,
                 end_seconds: info.end,
                 geometry: JSON.parse(geom.geometry_json), // GeoJSON LineString
