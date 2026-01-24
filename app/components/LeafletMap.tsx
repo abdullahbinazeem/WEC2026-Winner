@@ -11,7 +11,7 @@ import {
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { BusRoute, ChargingStation } from "../page";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 const chargingIcon = L.icon({
   iconUrl: "/assets/charging_station_icon.png",
@@ -25,6 +25,7 @@ const busIcon = L.icon({
   iconSize: [24, 24],
   iconAnchor: [12, 12],
 });
+
 
 type LatLng = [number, number]; // [lat, lon]
 
@@ -153,6 +154,8 @@ export default function LeafletMap({
 }) {
   const battery: BatteryParams = { capacityKWh: 450, runKW: 110, idleKW: 6 };
 
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+
   const activeMarkers = useMemo(() => {
     if (!playbackAll || playbackAll.currentTime == null) return [];
     const t = playbackAll.currentTime;
@@ -189,6 +192,7 @@ export default function LeafletMap({
         const socPct = socInfo ? Math.round(socInfo.soc * 100) : null;
         const ringColor = socInfo ? socColor(socInfo.soc) : "#2563eb";
 
+
         return {
           block_id: b.block_id,
           trip_id: b.trip_id,
@@ -211,6 +215,12 @@ export default function LeafletMap({
         status: "active" | "next" | "prev";
       }[];
   }, [playbackAll, intervalsByBlock]);
+
+  const selected = useMemo(() => {
+    if (!selectedBlockId) return null;
+    return activeMarkers.find((m) => m.block_id === selectedBlockId) ?? null;
+  }, [activeMarkers, selectedBlockId]);
+
 
   return (
     <MapContainer
@@ -266,10 +276,30 @@ export default function LeafletMap({
               radius={14}
               pathOptions={{ color: m.ringColor, weight: 4, opacity: 0.9 }}
               fillOpacity={0}
+
             />
           )}
 
-          <Marker key={`bus-${m.block_id}`} position={m.pos} icon={busIcon}>
+          {selected && (
+            <Polyline
+              positions={selected.latlngs}
+              pathOptions={{
+                color: "#2563eb",
+                weight: 10,
+                opacity: 0.95,
+              }}
+            />
+          )}
+
+
+          <Marker
+            key={`bus-${m.block_id}`}
+            position={m.pos}
+            icon={busIcon}
+            eventHandlers={{
+              click: () => setSelectedBlockId(m.block_id),
+            }}
+          >
             <Popup>
               <div style={{ fontSize: 13 }}>
                 <div>
@@ -281,20 +311,52 @@ export default function LeafletMap({
                 <div>
                   <strong>Status:</strong> {m.status}
                 </div>
+
                 {m.socInfo && (
                   <>
                     <div>
                       <strong>Battery:</strong> {m.socPct}%
                     </div>
                     <div>
-                      <strong>Remaining:</strong>{" "}
-                      {m.socInfo.remainingKWh.toFixed(1)} kWh
+                      <strong>Remaining:</strong> {m.socInfo.remainingKWh.toFixed(1)} kWh
                     </div>
                   </>
                 )}
+
+                <div style={{ marginTop: 8 }}>
+                  <button
+                    onClick={() => setSelectedBlockId(m.block_id)}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 8,
+                      border: "1px solid #ccc",
+                      background: selectedBlockId === m.block_id ? "#e5e7eb" : "white",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {selectedBlockId === m.block_id ? "Selected" : "Select"}
+                  </button>
+
+                  {selectedBlockId === m.block_id && (
+                    <button
+                      onClick={() => setSelectedBlockId(null)}
+                      style={{
+                        marginLeft: 8,
+                        padding: "8px 10px",
+                        borderRadius: 8,
+                        border: "1px solid #ccc",
+                        background: "white",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
               </div>
             </Popup>
           </Marker>
+
         </div>
       ))}
     </MapContainer>
