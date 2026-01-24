@@ -115,13 +115,6 @@ export default function Home() {
   return (
     <div className="relative">
       <LeafletMap busRoutes={busRoutes} chargingStations={chargingStations} />
-      <div className="fixed bottom-0 left-0 w-full h-50 z-9999 text-black bg-white overflow-scroll">
-        {busRoutes.map((route) => (
-          <div key={route.routeId}>
-            <h2>Route {route.routeId}</h2>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
