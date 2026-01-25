@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 export default function BusFleetDashboard({ buses }: { buses: any[] }) {
@@ -9,25 +10,40 @@ export default function BusFleetDashboard({ buses }: { buses: any[] }) {
     lowBattery: 0,
   });
 
+  // Simulated time (starts at now)
+  const [simTime, setSimTime] = useState<Date>(() => new Date());
+
+  // Update fleet stats
   useEffect(() => {
-    // In your actual implementation, you'll need to pass bus states
-    // For now, this is a demo structure
     setStats({
       total: buses.length,
       charging: buses.filter((b) => b.isCharging).length,
       movingToStation: buses.filter((b) => b.isMovingToStation).length,
       active: buses.filter((b) => !b.isCharging && !b.isMovingToStation).length,
-      lowBattery: buses.filter((b) => b.batteryLevel < 0.2).length,
+      lowBattery: buses.filter(
+        (b) => b.batteryLevel !== undefined && b.batteryLevel < 0.2,
+      ).length,
     });
   }, [buses]);
 
+  // Advance simulated time by +30s every 1s
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSimTime((prev) => new Date(prev.getTime() + 30 * 1000));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="absolute top-4 right-4 z-[1000] bg-white rounded-lg shadow-lg p-4 min-w-[280px]">
+      {/* Header */}
       <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-200">
         <h2 className="text-lg font-bold text-gray-800">Fleet Status</h2>
         <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
       </div>
 
+      {/* Stats */}
       <div className="space-y-3">
         {/* Total Buses */}
         <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
@@ -56,7 +72,7 @@ export default function BusFleetDashboard({ buses }: { buses: any[] }) {
           </div>
         </div>
 
-        {/* Active Buses */}
+        {/* Active */}
         <div className="flex items-center justify-between p-2 bg-green-50 rounded-lg">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 bg-green-500 rounded-full"></div>
@@ -91,7 +107,7 @@ export default function BusFleetDashboard({ buses }: { buses: any[] }) {
           </span>
         </div>
 
-        {/* Low Battery Warning */}
+        {/* Low Battery */}
         {stats.lowBattery > 0 && (
           <div className="flex items-center justify-between p-2 bg-red-50 rounded-lg border border-red-200">
             <div className="flex items-center gap-2">
@@ -117,12 +133,71 @@ export default function BusFleetDashboard({ buses }: { buses: any[] }) {
         )}
       </div>
 
+      {/* Fleet List */}
+      <div className="mt-4">
+        <h3 className="text-sm font-semibold text-gray-700 mb-2">
+          Active Fleet
+        </h3>
+
+        <div className="max-h-[220px] overflow-y-auto space-y-2 pr-1">
+          {buses.map((bus) => {
+            let statusLabel = "Active";
+            let statusColor = "bg-green-100 text-green-700";
+            let dotColor = "bg-green-500";
+
+            if (bus.isCharging) {
+              statusLabel = "Charging";
+              statusColor = "bg-yellow-100 text-yellow-700";
+              dotColor = "bg-yellow-500";
+            } else if (bus.isMovingToStation) {
+              statusLabel = "To Station";
+              statusColor = "bg-orange-100 text-orange-700";
+              dotColor = "bg-orange-500";
+            }
+
+            const lowBattery =
+              bus.batteryLevel !== undefined && bus.batteryLevel < 0.2;
+
+            return (
+              <div
+                key={bus.id}
+                className="flex items-center justify-between bg-gray-50 rounded-md px-3 py-2"
+              >
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${dotColor}`} />
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">
+                      Route {bus.routeId}
+                    </p>
+                    {lowBattery && (
+                      <p className="text-xs text-red-600">Low battery</p>
+                    )}
+                  </div>
+                </div>
+
+                <span
+                  className={`text-xs px-2 py-1 rounded-full font-medium ${statusColor}`}
+                >
+                  {statusLabel}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Footer */}
       <div className="mt-4 pt-3 border-t border-gray-200 flex items-center justify-between">
-        <span className="text-xs text-gray-500">Live Updates</span>
+        <span className="text-xs text-gray-500">⏱ Sim Time</span>
         <span className="text-xs text-gray-500">
-          {new Date().toLocaleTimeString()}
+          {simTime.toLocaleTimeString()}
         </span>
+      </div>
+
+      <div className="mt-4 pt-3 border-t border-gray-200 flex items-center justify-between">
+        <Link href="/analyzer" className="text-xs text-gray-400">
+          Go To Realtime Analyzer
+        </Link>
       </div>
     </div>
   );

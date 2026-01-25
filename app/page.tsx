@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Papa from "papaparse";
 
-const LeafletMap = dynamic(() => import("./components/LeafletMap"), {
+const LeafletMap = dynamic(() => import("./components2/LeafletMap"), {
   ssr: false,
 });
 
