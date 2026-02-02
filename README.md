@@ -1,36 +1,35 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🚌 EV Bus Simulation & Analyzer
 
-## Getting Started
+A **Next.js** application that simulates electric bus operations and analyzes performance, energy usage, and efficiency.  
+Designed to help explore **sustainability trade-offs**, **route behavior**, and **operational insights** for EV transit systems.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## 🚀 Tech Stack
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- **Next.js** (App Router)
+- **React**
+- **TypeScript**
+- **Charting / Visualization Libraries**
+- **Data-driven simulation logic**
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🧪 EV Bus Simulation
 
-## Learn More
+The simulation module models real-world electric bus behavior across routes, and time.
 
-To learn more about Next.js, take a look at the following resources:
+### 📸 Simulation
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+<img width="1511" height="813" alt="Screenshot 2026-02-01 at 5 08 56 PM" src="https://github.com/user-attachments/assets/9a7bdd1a-697c-41ad-b8ed-f7a967ea6e26" />
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## 📊 EV Bus Analyzer
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The analyzer transforms simulation output into **actionable insights** using data visualizations which the government of Edmonton can use to achieve it's goal of net-zero emissions by 2050.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+### 📸 Analyzer Screenshots
+
+<img width="1512" height="807" alt="Screenshot 2026-02-01 at 5 09 24 PM" src="https://github.com/user-attachments/assets/80302f31-5e15-448a-9339-39dabbb1ed83" />
