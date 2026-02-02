@@ -30,6 +30,6 @@ The simulation module models real-world electric bus behavior across routes, and
 The analyzer transforms simulation output into **actionable insights** using data visualizations which the government of Edmonton can use to achieve it's goal of net-zero emissions by 2050.
 
 
-### 📸 Analyzer Screenshots
+### 📸 Analyzer 
 
 <img width="1512" height="807" alt="Screenshot 2026-02-01 at 5 09 24 PM" src="https://github.com/user-attachments/assets/80302f31-5e15-448a-9339-39dabbb1ed83" />
